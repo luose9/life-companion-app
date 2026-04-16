@@ -1,0 +1,36 @@
+name: life_companion_app
+description: A Flutter MVP for goal, mood, map/track, schedule and finance.
+publish_to: 'none'
+version: 0.1.0
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  sqflite: ^2.3.0
+  path: ^1.9.0
+  flutter_local_notifications: ^17.0.0
+  timezone: ^0.9.4
+  flutter_typeahead: ^5.2.0
+  share_plus: ^10.0.0
+  shared_preferences: ^2.5.0
+  image_picker: ^1.1.0
+  path_provider: ^2.1.4
+  local_auth: ^2.3.0
+  file_picker: ^8.0.0
+  geolocator: ^13.0.0
+  http: ^1.2.0
+  cached_network_image: ^3.4.1
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

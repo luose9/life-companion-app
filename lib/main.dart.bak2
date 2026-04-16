@@ -1,0 +1,440 @@
+﻿import 'dart:io';
+import 'package:flutter/material.dart';
+import 'data/db_provider.dart';
+import 'data/goal_dao.dart';
+import 'models/goal.dart';
+import 'pages/goal_detail.dart';
+import 'pages/mood_page.dart';
+import 'pages/schedule_page.dart';
+import 'pages/workout_page.dart';
+import 'pages/entertainment_page.dart';
+import 'pages/finance_page.dart';
+import 'pages/stats_page.dart';
+import 'pages/profile_page.dart';
+import 'services/share_service.dart';
+import 'services/notification_service.dart';
+import 'services/user_profile_service.dart';
+import 'services/privacy_service.dart';
+import 'widgets/app_lock_guard.dart';
+import 'widgets/privacy_consent_dialog.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initNotificationPlugin();
+  runApp(const AppLockGuard(child: MyApp()));
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Life Companion',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const HomeScreen(),
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+  String _userName = '鐢ㄦ埛';
+  String? _avatarPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final first = await PrivacyService.isFirstLaunch();
+      if (first && mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => PrivacyConsentDialog(onAccepted: () {}),
+        );
+      }
+    });
+  }
+
+  Future<void> _loadProfile() async {
+    final name = await UserProfileService.getName();
+    final avatar = await UserProfileService.getAvatarPath();
+    if (mounted) setState(() { _userName = name; _avatarPath = avatar; });
+  }
+
+  static const List<Widget> _pages = <Widget>[
+    GoalsPage(),
+    MoodPage(),
+    SchedulePage(),
+    FinancePage(),
+    WorkoutPage(),
+    EntertainmentPage(),
+    StatsPage(),
+  ];
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Life Companion'),
+        actions: [
+          GestureDetector(
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfilePage()),
+              );
+              _loadProfile(); // 杩斿洖鍒锋柊澶村儚鍜屽悕绉?
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.blue.shade200,
+                backgroundImage: _avatarPath != null
+                    ? FileImage(File(_avatarPath!))
+                    : null,
+                child: _avatarPath == null
+                    ? Text(
+                        _userName.isNotEmpty
+                            ? _userName.characters.first.toUpperCase()
+                            : 'U',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13),
+                      )
+                    : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Center(child: _pages.elementAt(_selectedIndex)),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(icon: Icon(Icons.flag), label: '鐩爣'),
+          BottomNavigationBarItem(icon: Icon(Icons.mood), label: '蹇冩儏'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today), label: '鏃ョ▼'),
+          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: '璁拌处'),
+          BottomNavigationBarItem(icon: Icon(Icons.directions_run), label: '杩愬姩'),
+          BottomNavigationBarItem(icon: Icon(Icons.movie), label: '濞变箰'),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: '缁熻'),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: Colors.blue,
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
+        onTap: _onItemTapped,
+      ),
+    );
+  }
+}
+
+class GoalsPage extends StatefulWidget {
+  const GoalsPage({super.key});
+
+  @override
+  State<GoalsPage> createState() => _GoalsPageState();
+}
+
+class _GoalsPageState extends State<GoalsPage> {
+  List<Goal> _goals = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGoals();
+  }
+
+  Future<void> _loadGoals() async {
+    final list = await GoalDao.getAllGoals();
+    setState(() {
+      _goals = list;
+    });
+  }
+
+  Future<void> _showAddDialog() async {
+    final titleCtl = TextEditingController();
+    final descCtl = TextEditingController();
+    DateTime? startDate;
+    DateTime? endDate;
+    final remindCtl = TextEditingController();
+    String repeatRule = 'none';
+    TimeOfDay? remindTimeOfDay;
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setState) {
+        return AlertDialog(
+          title: const Text('鏂板鐩爣'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: titleCtl, decoration: const InputDecoration(labelText: '鏍囬')),
+                TextField(controller: descCtl, decoration: const InputDecoration(labelText: '鎻忚堪')),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(
+                    child: Text(startDate == null ? '寮€濮嬫棩鏈燂細鏈缃? : '寮€濮嬶細${startDate!.toLocal().toString().split(" ").first}'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (d != null) setState(() => startDate = d);
+                    },
+                    child: const Text('閫夋嫨'),
+                  )
+                ]),
+                Row(children: [
+                  Expanded(
+                    child: Text(endDate == null ? '鎴鏃ユ湡锛氭湭璁剧疆' : '鎴锛?{endDate!.toLocal().toString().split(" ").first}'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (d != null) setState(() => endDate = d);
+                    },
+                    child: const Text('閫夋嫨'),
+                  )
+                ]),
+                TextField(controller: remindCtl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '鎻愬墠鎻愰啋锛堝垎閽燂級锛岀暀绌哄垯涓嶆彁閱?)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Text('閲嶅锛?),
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(value: repeatRule, items: const [
+                    DropdownMenuItem(value: 'none', child: Text('涓嶉噸澶?)),
+                    DropdownMenuItem(value: 'daily', child: Text('姣忓ぉ')),
+                    DropdownMenuItem(value: 'weekly', child: Text('姣忓懆')),
+                  ], onChanged: (v) { if (v != null) setState(() => repeatRule = v); }),
+                ]),
+                Row(children: [
+                  Expanded(child: Text(remindTimeOfDay == null ? '鎻愰啋鏃堕棿锛氭湭璁剧疆' : '鎻愰啋鏃堕棿锛?{remindTimeOfDay!.format(context)}')),
+                  TextButton(onPressed: () async { final t = await showTimePicker(context: context, initialTime: remindTimeOfDay ?? TimeOfDay.now()); if (t != null) setState(() => remindTimeOfDay = t); }, child: const Text('閫夋嫨鏃堕棿')),
+                ]),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('鍙栨秷')),
+            TextButton(
+              onPressed: () async {
+                final title = titleCtl.text.trim();
+                if (title.isEmpty) return;
+                final remindMin = int.tryParse(remindCtl.text.trim() == '' ? '0' : remindCtl.text.trim()) ?? 0;
+                final goal = Goal(
+                  title: title,
+                  description: descCtl.text.trim(),
+                  createdAt: DateTime.now().millisecondsSinceEpoch,
+                  startDate: startDate?.millisecondsSinceEpoch,
+                  endDate: endDate?.millisecondsSinceEpoch,
+                  remindMinutes: remindMin,
+                  repeatRule: repeatRule == 'none' ? null : repeatRule,
+                  remindTime: remindTimeOfDay != null ? remindTimeOfDay.hour * 60 + remindTimeOfDay.minute : null,
+                );
+                final id = await GoalDao.insertGoal(goal);
+                // schedule notification for end-date reminder
+                if (goal.endDate != null && (goal.remindMinutes ?? 0) > 0) {
+                  final notifyAt = DateTime.fromMillisecondsSinceEpoch(goal.endDate!).subtract(Duration(minutes: goal.remindMinutes!));
+                  await NotificationService.instance.scheduleNotification(id, '鐩爣鍗冲皢鍒版湡', goal.title, notifyAt);
+                }
+                // schedule recurring reminders if requested
+                if (goal.repeatRule != null && goal.remindTime != null) {
+                  // compute first instance based on remindTime
+                  final now = DateTime.now();
+                  final next = DateTime(now.year, now.month, now.day, (goal.remindTime! / 60).floor(), goal.remindTime! % 60);
+                  DateTime firstInstance = next.isBefore(now) ? next.add(const Duration(days: 1)) : next;
+                  if (goal.repeatRule == 'weekly') {
+                    // keep the same weekday as today for first instance
+                    // user can refine later; scheduling weekly will occur on that weekday/time
+                  }
+                  await NotificationService.instance.scheduleRecurring(id, '鐩爣鎻愰啋', goal.title, firstInstance, goal.repeatRule!);
+                }
+                Navigator.pop(context);
+                await _loadGoals();
+              },
+              child: const Text('淇濆瓨'),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  Future<void> _showEditDialog(Goal g) async {
+    final titleCtl = TextEditingController(text: g.title);
+    final descCtl = TextEditingController(text: g.description);
+    DateTime? startDate = g.startDate != null ? DateTime.fromMillisecondsSinceEpoch(g.startDate!) : null;
+    DateTime? endDate = g.endDate != null ? DateTime.fromMillisecondsSinceEpoch(g.endDate!) : null;
+    final remindCtl = TextEditingController(text: (g.remindMinutes ?? 0) > 0 ? '${g.remindMinutes}' : '');
+    String repeatRule = g.repeatRule ?? 'none';
+    TimeOfDay? remindTimeOfDay = g.remindTime != null ? TimeOfDay(hour: (g.remindTime! / 60).floor(), minute: g.remindTime! % 60) : null;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setState) {
+        return AlertDialog(
+          title: const Text('缂栬緫鐩爣'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: titleCtl, decoration: const InputDecoration(labelText: '鏍囬')),
+                TextField(controller: descCtl, decoration: const InputDecoration(labelText: '鎻忚堪')),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: Text(startDate == null ? '寮€濮嬫棩鏈燂細鏈缃? : '寮€濮嬶細${startDate.toLocal().toString().split(' ').first}')),
+                  TextButton(onPressed: () async {final d = await showDatePicker(context: context, initialDate: startDate ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setState(() => startDate = d);}, child: const Text('閫夋嫨')),
+                ]),
+                Row(children: [
+                  Expanded(child: Text(endDate == null ? '鎴鏃ユ湡锛氭湭璁剧疆' : '鎴锛?{endDate.toLocal().toString().split(' ').first}')),
+                  TextButton(onPressed: () async {final d = await showDatePicker(context: context, initialDate: endDate ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setState(() => endDate = d);}, child: const Text('閫夋嫨')),
+                ]),
+                TextField(controller: remindCtl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '鎻愬墠鎻愰啋锛堝垎閽燂級锛岀暀绌哄垯涓嶆彁閱?)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Text('閲嶅锛?),
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(value: repeatRule, items: const [
+                    DropdownMenuItem(value: 'none', child: Text('涓嶉噸澶?)),
+                    DropdownMenuItem(value: 'daily', child: Text('姣忓ぉ')),
+                    DropdownMenuItem(value: 'weekly', child: Text('姣忓懆')),
+                  ], onChanged: (v) { if (v != null) setState(() => repeatRule = v); }),
+                ]),
+                Row(children: [
+                  Expanded(child: Text(remindTimeOfDay == null ? '鎻愰啋鏃堕棿锛氭湭璁剧疆' : '鎻愰啋鏃堕棿锛?{remindTimeOfDay!.format(context)}')),
+                  TextButton(onPressed: () async { final t = await showTimePicker(context: context, initialTime: remindTimeOfDay ?? TimeOfDay.now()); if (t != null) setState(() => remindTimeOfDay = t); }, child: const Text('閫夋嫨鏃堕棿')),
+                ]),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('鍙栨秷')),
+            TextButton(onPressed: () async {
+              final title = titleCtl.text.trim();
+              if (title.isEmpty) return;
+              final remindMin = int.tryParse(remindCtl.text.trim() == '' ? '0' : remindCtl.text.trim()) ?? 0;
+              g.title = title;
+              g.description = descCtl.text.trim();
+              g.startDate = startDate?.millisecondsSinceEpoch;
+              g.endDate = endDate?.millisecondsSinceEpoch;
+              g.remindMinutes = remindMin;
+              g.repeatRule = repeatRule == 'none' ? null : repeatRule;
+              g.remindTime = remindTimeOfDay != null ? remindTimeOfDay.hour * 60 + remindTimeOfDay.minute : null;
+              await GoalDao.updateGoal(g);
+              // reschedule: cancel existing, then schedule new
+              await NotificationService.instance.cancel(g.id ?? 0);
+              if (g.endDate != null && (g.remindMinutes ?? 0) > 0) {
+                final notifyAt = DateTime.fromMillisecondsSinceEpoch(g.endDate!).subtract(Duration(minutes: g.remindMinutes!));
+                await NotificationService.instance.scheduleNotification(g.id ?? 0, '鐩爣鍗冲皢鍒版湡', g.title, notifyAt);
+              }
+              if (g.repeatRule != null && g.remindTime != null) {
+                final now = DateTime.now();
+                final next = DateTime(now.year, now.month, now.day, (g.remindTime! / 60).floor(), g.remindTime! % 60);
+                DateTime firstInstance = next.isBefore(now) ? next.add(const Duration(days: 1)) : next;
+                await NotificationService.instance.scheduleRecurring(g.id ?? 0, '鐩爣鎻愰啋', g.title, firstInstance, g.repeatRule!);
+              }
+              Navigator.pop(context);
+              await _loadGoals();
+            }, child: const Text('淇濆瓨')),
+          ],
+        );
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('鎴戠殑鐩爣', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ElevatedButton.icon(onPressed: _showAddDialog, icon: const Icon(Icons.add), label: const Text('鏂板')),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _goals.isEmpty
+                ? const Center(child: Text('鏆傛棤鐩爣'))
+                : ListView.builder(
+                    itemCount: _goals.length,
+                    itemBuilder: (context, idx) {
+                      final g = _goals[idx];
+                      return Dismissible(
+                        key: ValueKey(g.id ?? idx),
+                        direction: DismissDirection.endToStart,
+                        background: Container(color: Colors.red, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 16), child: const Icon(Icons.delete, color: Colors.white)),
+                        onDismissed: (_) async {
+                          if (g.id != null) {
+                            await NotificationService.instance.cancel(g.id!);
+                            await GoalDao.deleteGoal(g.id!);
+                          }
+                          await _loadGoals();
+                        },
+                        child: Card(
+                          child: ListTile(
+                            title: Text(g.title),
+                            subtitle: Text(g.description ?? ''),
+                            trailing: PopupMenuButton<String>(
+                              icon: Text('${g.progress}%',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                              onSelected: (v) async {
+                                if (v == 'edit') await _showEditDialog(g);
+                                if (v == 'share') ShareService.shareGoal(g);
+                              },
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: ListTile(leading: Icon(Icons.edit), title: Text('缂栬緫')),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'share',
+                                  child: ListTile(leading: Icon(Icons.share), title: Text('鍒嗕韩')),
+                                ),
+                              ],
+                            ),
+                            onTap: () async {
+                              // 鎵撳紑鐩爣璇︽儏椤?
+                              await Navigator.push(context, MaterialPageRoute(builder: (_) => GoalDetailPage(goal: g)));
+                              await _loadGoals();
+                            },
+                            onLongPress: () async {
+                              await _showEditDialog(g);
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+
+
+
+
+

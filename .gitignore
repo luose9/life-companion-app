@@ -1,0 +1,17 @@
+/.dart_tool/
+/build/
+/.idea/
+.vscode/
+.packages
+pubspec.lock
+android/.gradle
+android/app/debug
+android/app/profile
+android/app/release
+**/GeneratedPluginRegistrant.*
+*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+*.jks
+*.keystore
+local.properties
