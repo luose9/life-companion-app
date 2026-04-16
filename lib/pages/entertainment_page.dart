@@ -46,7 +46,7 @@ class _EntertainmentPageState extends State<EntertainmentPage> {
 
   // ── 新增 / 编辑 ─────────────────────────────────────────
   Future<void> _showDialog({Entertainment? existing}) async {
-    String mediaType = existing?.mediaType ?? 'movie';
+    String mediaType = existing?.mediaType ?? (_filterType != 'all' ? _filterType : 'movie');
     final titleCtl = TextEditingController(text: existing?.title ?? '');
     final creatorCtl = TextEditingController(text: existing?.creator ?? '');
     final tagsCtl = TextEditingController(text: existing?.tags ?? '');
