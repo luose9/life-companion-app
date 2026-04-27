@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:life_companion_app/data/mood_dao.dart';
 import 'package:life_companion_app/models/mood.dart';
 import 'package:life_companion_app/widgets/charts.dart';
+import 'package:life_companion_app/main.dart';
 
 // ── 基础情绪（P0一键记录） ──
 const List<Map<String, String>> _kQuickMoods = [
@@ -127,6 +128,7 @@ class _MoodPageState extends State<MoodPage> with SingleTickerProviderStateMixin
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 条心情记录'), duration: const Duration(seconds: 2)),
       );
@@ -607,7 +609,10 @@ class _MoodPageState extends State<MoodPage> with SingleTickerProviderStateMixin
                   IconButton(
                     icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                     tooltip: _multiSelect ? '退出多选' : '多选',
-                    onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                    onPressed: () => setState(() {
+                      _multiSelect = !_multiSelect; _selectedIds.clear();
+                      globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                    }),
                   ),
                   TextButton.icon(
                     onPressed: _showBatchBackfill,
@@ -724,6 +729,7 @@ class _MoodPageState extends State<MoodPage> with SingleTickerProviderStateMixin
             onLongPress: () {
               if (!_multiSelect && m.id != null) {
                 setState(() { _multiSelect = true; _selectedIds.add(m.id!); });
+                globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
               }
             },
             onTap: _multiSelect ? () {

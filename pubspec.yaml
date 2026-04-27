@@ -8,6 +8,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   cupertino_icons: ^1.0.6
   sqflite: ^2.3.0
   path: ^1.9.0
@@ -22,6 +24,7 @@ dependencies:
   file_picker: ^8.0.0
   geolocator: ^13.0.0
   http: ^1.2.0
+  url_launcher: ^6.3.0
   cached_network_image: ^3.4.1
   flutter_map: ^7.0.2
   latlong2: ^0.9.1

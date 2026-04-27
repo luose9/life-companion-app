@@ -20,4 +20,7 @@ class HobbyWorkDao {
 
   static Future<int> delete(int id) =>
       DBProvider.db.delete('hobby_works', id);
+
+  static Future<int> update(HobbyWork w) =>
+      DBProvider.db.update('hobby_works', w.toMap(), w.id!);
 }

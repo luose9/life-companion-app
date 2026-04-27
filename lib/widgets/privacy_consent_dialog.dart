@@ -8,8 +8,8 @@ class PrivacyConsentDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false, // 禁止返回键关闭
+    return PopScope(
+      canPop: false,
       child: AlertDialog(
         title: const Row(
           children: [

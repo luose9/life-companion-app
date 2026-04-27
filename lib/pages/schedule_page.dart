@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:life_companion_app/data/schedule_dao.dart';
 import 'package:life_companion_app/models/schedule.dart';
 import 'package:life_companion_app/services/notification_service.dart';
+import 'package:life_companion_app/main.dart';
 
 const int _kScheduleNotifyOffset = 10000;
 
@@ -459,6 +460,7 @@ class _SchedulePageState extends State<SchedulePage> {
     await _load();
     if (mounted) {
       setState(() { _multiSelect = false; _showAll = wasShowAll; });
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 个日程'), duration: const Duration(seconds: 2)),
       );
@@ -527,7 +529,10 @@ class _SchedulePageState extends State<SchedulePage> {
                 IconButton(
                   icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                   tooltip: _multiSelect ? '退出多选' : '多选',
-                  onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                  onPressed: () => setState(() {
+                    _multiSelect = !_multiSelect; _selectedIds.clear();
+                    globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                  }),
                 ),
               ],
             ),
@@ -637,6 +642,7 @@ class _SchedulePageState extends State<SchedulePage> {
           onLongPress: () {
             if (!_multiSelect && s.id != null) {
               setState(() { _multiSelect = true; _selectedIds.add(s.id!); });
+              globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
             }
           },
           onTap: _multiSelect ? () {

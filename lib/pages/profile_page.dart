@@ -27,6 +27,8 @@ class _ProfilePageState extends State<ProfilePage> {
   int _createdAt = 0;
   bool _loading = true;
   bool _exporting = false;
+  bool _importing = false;
+  bool _fullExporting = false;
 
   // ── 新设置项 ──
   double _fontScale = 1.0;
@@ -212,6 +214,108 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  // ── 完整备份导出 ──────────────────────────────────────────
+  Future<void> _exportFullBackup() async {
+    setState(() => _fullExporting = true);
+    try {
+      await DataExportService.exportFullBackup();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('导出失败：$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _fullExporting = false);
+    }
+  }
+
+  // ── 导入数据 ──────────────────────────────────────────────
+  Future<void> _importData() async {
+    final mode = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.file_download, color: Colors.blue),
+          SizedBox(width: 8),
+          Text('导入数据'),
+        ]),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('请选择导入方式：', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 12),
+            Text('追加导入：保留现有数据，将备份文件中的记录追加进来。'),
+            SizedBox(height: 8),
+            Text('覆盖导入：清空现有全部数据后再导入（不可恢复）。'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, 'append'),
+            child: const Text('追加导入'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () => Navigator.pop(ctx, 'overwrite'),
+            child: const Text('覆盖导入', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (mode == null) return;
+
+    if (mode == 'overwrite') {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(children: [
+            Icon(Icons.warning, color: Colors.red),
+            SizedBox(width: 8),
+            Text('确认覆盖'),
+          ]),
+          content: const Text('覆盖导入将清空所有现有数据！\n请确保已备份当前数据。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('确认覆盖', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
+    }
+
+    setState(() => _importing = true);
+    try {
+      if (mode == 'overwrite') {
+        await DataExportService.clearAllTables();
+      }
+      final result = await DataExportService.importFromFile();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result), duration: const Duration(seconds: 4)));
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('导入失败：$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
   // ── 清除所有数据 ──────────────────────────────────────────
   Future<void> _showClearConfirm() async {
     final confirm = await showDialog<bool>(
@@ -309,6 +413,16 @@ class _ProfilePageState extends State<ProfilePage> {
     'transactions': '账单',
     'workouts': '运动',
     'entertainments': '娱乐',
+    'focus_sessions': '专注',
+    'checkin_records': '打卡',
+    'hobbies': '爱好',
+    'hobby_works': '作品',
+    'body_records': '身体',
+    'persons': '人际',
+    'relationship_moments': '瞬间',
+    'inspirations': '灵感',
+    'gratitudes': '感恩',
+    'milestones': '里程碑',
   };
 
   int get _totalRecords => _counts.values.fold(0, (a, b) => a + b);
@@ -467,6 +581,36 @@ class _ProfilePageState extends State<ProfilePage> {
                   Card(
                     child: Column(
                       children: [
+                        ListTile(
+                          leading: _fullExporting
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.backup,
+                                  color: Colors.green),
+                          title: const Text('完整备份'),
+                          subtitle: const Text('导出所有数据和设置，可用于恢复'),
+                          trailing: const Icon(Icons.arrow_forward_ios,
+                              size: 14, color: Colors.grey),
+                          onTap: _fullExporting ? null : _exportFullBackup,
+                        ),
+                        const Divider(height: 1, indent: 56),
+                        ListTile(
+                          leading: _importing
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.restore,
+                                  color: Colors.indigo),
+                          title: const Text('从备份恢复'),
+                          subtitle: const Text('选择 JSON 备份文件导入数据'),
+                          trailing: const Icon(Icons.arrow_forward_ios,
+                              size: 14, color: Colors.grey),
+                          onTap: _importing ? null : _importData,
+                        ),
+                        const Divider(height: 1, indent: 56),
                         ListTile(
                           leading: _exporting
                               ? const SizedBox(

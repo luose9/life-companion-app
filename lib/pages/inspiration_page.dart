@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:life_companion_app/data/inspiration_dao.dart';
 import 'package:life_companion_app/models/inspiration.dart';
+import 'package:life_companion_app/main.dart';
 
 class InspirationPage extends StatefulWidget {
   const InspirationPage({super.key});
@@ -58,6 +59,7 @@ class _InspirationPageState extends State<InspirationPage> with SingleTickerProv
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 条灵感'), duration: const Duration(seconds: 2)),
       );
@@ -175,7 +177,10 @@ class _InspirationPageState extends State<InspirationPage> with SingleTickerProv
             IconButton(
               icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
               tooltip: _multiSelect ? '退出多选' : '多选',
-              onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+              onPressed: () => setState(() {
+                _multiSelect = !_multiSelect; _selectedIds.clear();
+                globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+              }),
             ),
           ]),
           if (_multiSelect)
@@ -231,6 +236,7 @@ class _InspirationPageState extends State<InspirationPage> with SingleTickerProv
                           onLongPress: () {
                             if (!_multiSelect && item.id != null) {
                               setState(() { _multiSelect = true; _selectedIds.add(item.id!); });
+                              globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
                             }
                           },
                           onTap: _multiSelect ? () {

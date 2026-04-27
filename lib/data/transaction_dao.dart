@@ -27,4 +27,15 @@ class TransactionDao {
 
   static Future<int> delete(int id) =>
       DBProvider.db.delete('transactions', id);
+
+  /// 查询 [start, end) 区间内的交易记录（end 应传入末日次日凌晨）
+  static Future<List<TransactionEntry>> getByDateRange(
+      DateTime start, DateTime end) async {
+    final db = await DBProvider.db.database;
+    final maps = await db.query('transactions',
+        where: 'timestamp >= ? AND timestamp < ?',
+        whereArgs: [start.millisecondsSinceEpoch, end.millisecondsSinceEpoch],
+        orderBy: 'timestamp DESC');
+    return maps.map(TransactionEntry.fromMap).toList();
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:life_companion_app/data/person_dao.dart';
 import 'package:life_companion_app/models/person.dart';
+import 'package:life_companion_app/main.dart';
 
 class RelationshipPage extends StatefulWidget {
   const RelationshipPage({super.key});
@@ -57,6 +58,7 @@ class _RelationshipPageState extends State<RelationshipPage> {
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 个人'), duration: const Duration(seconds: 2)),
       );
@@ -181,7 +183,10 @@ class _RelationshipPageState extends State<RelationshipPage> {
               IconButton(
                 icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                 tooltip: _multiSelect ? '退出多选' : '多选',
-                onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                onPressed: () => setState(() {
+                  _multiSelect = !_multiSelect; _selectedIds.clear();
+                  globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                }),
               ),
             ]),
           ),
@@ -236,6 +241,7 @@ class _RelationshipPageState extends State<RelationshipPage> {
                     onLongPress: () {
                       if (!_multiSelect && p.id != null) {
                         setState(() { _multiSelect = true; _selectedIds.add(p.id!); });
+                        globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
                       }
                     },
                     onTap: _multiSelect ? () {

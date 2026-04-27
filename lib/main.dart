@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'data/db_provider.dart';
 import 'pages/goals_page.dart';
@@ -18,11 +19,15 @@ import 'pages/inspiration_page.dart';
 import 'pages/gratitude_page.dart';
 import 'pages/milestone_page.dart';
 import 'services/notification_service.dart';
+
 import 'services/user_profile_service.dart';
 import 'services/privacy_service.dart';
 import 'services/app_settings_service.dart';
 import 'widgets/app_lock_guard.dart';
 import 'widgets/privacy_consent_dialog.dart';
+
+/// 全局多选取消回调，子页面进入多选时注册，退出时置 null
+VoidCallback? globalCancelMultiSelect;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,7 +75,44 @@ class _MyAppState extends State<MyApp> {
       title: 'Life Companion',
       theme: ThemeData(primarySwatch: Colors.blue),
       darkTheme: ThemeData.dark().copyWith(
-        colorScheme: ColorScheme.dark(primary: Colors.blue.shade300),
+        colorScheme: ColorScheme.dark(
+          primary: Colors.blue.shade300,
+          secondary: Colors.blue.shade200,
+        ),
+        // ── Chip（ChoiceChip / FilterChip）深色模式修复 ──
+        // 默认未选中背景几乎透明，与对话框背景无法区分；这里给显式灰底+边框
+        chipTheme: ChipThemeData(
+          backgroundColor: const Color(0xFF3D3D3D),
+          selectedColor: Colors.blue.shade700,
+          disabledColor: const Color(0xFF2A2A2A),
+          labelStyle: const TextStyle(color: Colors.white),
+          secondaryLabelStyle: const TextStyle(color: Colors.white),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          side: const BorderSide(color: Color(0xFF5A5A5A)),
+          showCheckmark: false,
+          checkmarkColor: Colors.white,
+          brightness: Brightness.dark,
+        ),
+        // ── 输入框深色修复：边框默认几乎不可见 ──
+        inputDecorationTheme: InputDecorationTheme(
+          border: const OutlineInputBorder(),
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.grey.shade600),
+          ),
+          labelStyle: TextStyle(color: Colors.grey.shade400),
+          hintStyle: TextStyle(color: Colors.grey.shade600),
+        ),
+        // ── ElevatedButton 深色模式：白字蓝底 ──
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            foregroundColor: Colors.white,
+            backgroundColor: Colors.blue.shade700,
+          ),
+        ),
+        // ── 卡片 / 对话框背景稍亮于页面背景，层次分明 ──
+        cardTheme: const CardThemeData(color: Color(0xFF2E2E2E)),
+        dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF2C2C2C)),
+        dividerColor: const Color(0xFF444444),
       ),
       themeMode: _themeMode,
       builder: (context, child) {
@@ -83,6 +125,15 @@ class _MyAppState extends State<MyApp> {
         );
       },
       home: HomeScreen(onSettingsChanged: _loadSettings),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('zh', 'CN'),
+        Locale('en', 'US'),
+      ],
     );
   }
 }
@@ -257,157 +308,236 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_modules[_selectedIndex].label),
-        actions: [
-          GestureDetector(
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfilePage()),
-              );
-              _loadProfile();
-              _loadVacation();
-              widget.onSettingsChanged?.call();
-            },
+    final size = MediaQuery.of(context).size;
+    // 宽度 ≥ 600 视为平板；横屏时启用侧边导航
+    final isTablet = size.width >= 600;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final useNavRail = isTablet && isLandscape;
+    // 宽度 ≥ 840 时展开导航轨道（显示文字）
+    final railExtended = size.width >= 840;
+
+    // ── 页面主体 ──
+    final pageBody = _vacationMode
+        ? Center(
             child: Padding(
-              padding: const EdgeInsets.only(right: 14),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.blue.shade200,
-                backgroundImage: _avatarPath != null
-                    ? FileImage(File(_avatarPath!))
-                    : null,
-                child: _avatarPath == null
-                    ? Text(
-                        _userName.isNotEmpty
-                            ? _userName.characters.first.toUpperCase()
-                            : 'U',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13),
-                      )
-                    : null,
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.spa, size: 64, color: Colors.teal),
+                  const SizedBox(height: 16),
+                  const Text('好好休息',
+                      style:
+                          TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('我在这里等你回来 🌿',
+                      style: TextStyle(
+                          fontSize: 14, color: Colors.grey.shade500)),
+                  const SizedBox(height: 24),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.exit_to_app),
+                    label: const Text('关闭休假模式'),
+                    onPressed: () async {
+                      await AppSettingsService.setVacationMode(false);
+                      await AppSettingsService.resetZeroPressure();
+                      _loadVacation();
+                    },
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
-      ),
-      drawer: Drawer(
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Row(children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.blue.shade200,
-                    backgroundImage: _avatarPath != null ? FileImage(File(_avatarPath!)) : null,
-                    child: _avatarPath == null
-                        ? Text(_userName.isNotEmpty ? _userName.characters.first.toUpperCase() : 'U',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(_userName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ]),
+          )
+        : _modules[_selectedIndex].page;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && globalCancelMultiSelect != null) {
+          globalCancelMultiSelect!();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_modules[_selectedIndex].label),
+          actions: [
+            GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
+                );
+                _loadProfile();
+                _loadVacation();
+                widget.onSettingsChanged?.call();
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.blue.shade200,
+                  backgroundImage: _avatarPath != null
+                      ? FileImage(File(_avatarPath!))
+                      : null,
+                  child: _avatarPath == null
+                      ? Text(
+                          _userName.isNotEmpty
+                              ? _userName.characters.first.toUpperCase()
+                              : 'U',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13),
+                        )
+                      : null,
+                ),
               ),
-              const Divider(),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _modules.length,
-                  itemBuilder: (ctx, i) {
-                    final m = _modules[i];
-                    final selected = _selectedIndex == i;
-                    final defaultColor = Theme.of(ctx).textTheme.bodyLarge?.color ?? Colors.white70;
-                    return ListTile(
-                      leading: Icon(m.icon, color: selected ? Colors.blue : defaultColor.withOpacity(0.6)),
-                      title: Text(m.label, style: TextStyle(
-                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                          color: selected ? Colors.blue : defaultColor)),
-                      selected: selected,
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _onItemTapped(i);
-                      },
-                    );
+            ),
+          ],
+        ),
+        drawer: Drawer(
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.blue.shade200,
+                      backgroundImage: _avatarPath != null
+                          ? FileImage(File(_avatarPath!))
+                          : null,
+                      child: _avatarPath == null
+                          ? Text(
+                              _userName.isNotEmpty
+                                  ? _userName.characters.first.toUpperCase()
+                                  : 'U',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold))
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(_userName,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+                const Divider(),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _modules.length,
+                    itemBuilder: (ctx, i) {
+                      final m = _modules[i];
+                      final selected = _selectedIndex == i;
+                      final defaultColor =
+                          Theme.of(ctx).textTheme.bodyLarge?.color ??
+                              Colors.white70;
+                      return ListTile(
+                        leading: Icon(m.icon,
+                            color: selected
+                                ? Colors.blue
+                                : defaultColor.withOpacity(0.6)),
+                        title: Text(m.label,
+                            style: TextStyle(
+                                fontWeight: selected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color:
+                                    selected ? Colors.blue : defaultColor)),
+                        selected: selected,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _onItemTapped(i);
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Icon(Icons.dashboard_customize_outlined,
+                      color: Theme.of(context)
+                          .textTheme
+                          .bodyLarge
+                          ?.color
+                          ?.withOpacity(0.5)),
+                  title: const Text('自定义导航栏'),
+                  dense: true,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showNavSettingsDialog();
                   },
                 ),
-              ),
-              const Divider(),
-              ListTile(
-                leading: Icon(Icons.dashboard_customize_outlined, color: Theme.of(context).textTheme.bodyLarge?.color?.withOpacity(0.5)),
-                title: const Text('自定义导航栏'),
-                dense: true,
-                onTap: () {
-                  Navigator.pop(context);
-                  _showNavSettingsDialog();
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.cleaning_services_outlined, color: Theme.of(context).textTheme.bodyLarge?.color?.withOpacity(0.5)),
-                title: const Text('清理缓存'),
-                dense: true,
-                onTap: () async {
-                  Navigator.pop(context);
-                  PaintingBinding.instance.imageCache.clear();
-                  PaintingBinding.instance.imageCache.clearLiveImages();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('缓存已清理')),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
+                ListTile(
+                  leading: Icon(Icons.cleaning_services_outlined,
+                      color: Theme.of(context)
+                          .textTheme
+                          .bodyLarge
+                          ?.color
+                          ?.withOpacity(0.5)),
+                  title: const Text('清理缓存'),
+                  dense: true,
+                  onTap: () async {
+                    Navigator.pop(context);
+                    PaintingBinding.instance.imageCache.clear();
+                    PaintingBinding.instance.imageCache.clearLiveImages();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('缓存已清理')),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         ),
-      ),
-      body: _vacationMode
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.spa, size: 64, color: Colors.teal),
-                    const SizedBox(height: 16),
-                    const Text('好好休息',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text('我在这里等你回来 🌿',
-                        style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
-                    const SizedBox(height: 24),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.exit_to_app),
-                      label: const Text('关闭休假模式'),
-                      onPressed: () async {
-                        await AppSettingsService.setVacationMode(false);
-                        await AppSettingsService.resetZeroPressure();
-                        _loadVacation();
-                      },
-                    ),
-                  ],
-                ),
+        // ── 平板横屏：侧边导航 + 内容区；手机 / 竖屏：正常内容 ──
+        body: useNavRail
+            ? Row(
+                children: [
+                  NavigationRail(
+                    selectedIndex: _bottomNavIndex,
+                    onDestinationSelected: (i) =>
+                        _onItemTapped(_bottomNavModules[i]),
+                    extended: railExtended,
+                    labelType: railExtended
+                        ? NavigationRailLabelType.none
+                        : NavigationRailLabelType.all,
+                    leading: const SizedBox(height: 4),
+                    destinations: _bottomNavModules.map((i) {
+                      final m = _modules[i];
+                      return NavigationRailDestination(
+                        icon: Icon(m.icon),
+                        label: Text(m.label),
+                      );
+                    }).toList(),
+                  ),
+                  const VerticalDivider(thickness: 1, width: 1),
+                  Expanded(child: pageBody),
+                ],
+              )
+            : pageBody,
+        // ── 平板横屏不显示底部导航栏 ──
+        bottomNavigationBar: useNavRail
+            ? null
+            : BottomNavigationBar(
+                items: _bottomNavModules.map((i) {
+                  final m = _modules[i];
+                  return BottomNavigationBarItem(
+                      icon: Icon(m.icon), label: m.label);
+                }).toList(),
+                currentIndex: _bottomNavIndex,
+                selectedItemColor: Colors.blue,
+                unselectedItemColor: Colors.grey,
+                type: BottomNavigationBarType.fixed,
+                onTap: (i) {
+                  _onItemTapped(_bottomNavModules[i]);
+                },
               ),
-            )
-          : _modules[_selectedIndex].page,
-      bottomNavigationBar: BottomNavigationBar(
-        items: _bottomNavModules.map((i) {
-          final m = _modules[i];
-          return BottomNavigationBarItem(icon: Icon(m.icon), label: m.label);
-        }).toList(),
-        currentIndex: _bottomNavIndex,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        onTap: (i) {
-          _onItemTapped(_bottomNavModules[i]);
-        },
       ),
     );
   }

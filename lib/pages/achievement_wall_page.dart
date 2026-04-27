@@ -63,7 +63,7 @@ class _AchievementWallPageState extends State<AchievementWallPage> {
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
             const SizedBox(height: 8),
-            const Text('这就是你一步步走过来的样子，真厉害 ✨', style: TextStyle(color: Colors.black54, fontSize: 13)),
+            Text('这就是你一步步走过来的样子，真厉害 ✨', style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),
           ],
         ),
         actions: [

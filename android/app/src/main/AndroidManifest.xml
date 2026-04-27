@@ -28,6 +28,18 @@
     <!-- ── 网络（share_plus 等可能用到） ── -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- url_launcher：Android 11+ 需要声明可查询的 intent 协议 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+    </queries>
+
     <!-- ── GPS 定位（geolocator 运动追踪） ── -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
@@ -73,6 +85,16 @@
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
             android:exported="false"/>
+
+        <!-- 微信支付通知监听（需用户在「通知使用权」中手动授权） -->
+        <service
+            android:name=".WechatPayListenerService"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
 
         <!-- FileProvider（share_plus / 图片导出） -->
         <provider

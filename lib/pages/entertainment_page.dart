@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:life_companion_app/data/entertainment_dao.dart';
 import 'package:life_companion_app/models/entertainment.dart';
 import 'package:life_companion_app/services/media_search_service.dart';
+import 'package:life_companion_app/main.dart';
 
 const List<Map<String, dynamic>> _kMediaTypes = [
   {'type': 'movie', 'label': '电影', 'icon': Icons.movie},
@@ -26,6 +27,7 @@ class EntertainmentPage extends StatefulWidget {
 class _EntertainmentPageState extends State<EntertainmentPage> {
   List<Entertainment> _items = [];
   String _filterType = 'all';
+  String _sortOrder  = 'newest'; // newest | oldest | rating_high | rating_low | title
   final Set<int> _expandedIds = {};
   bool _multiSelect = false;
   final Set<int> _selectedIds = {};
@@ -41,8 +43,19 @@ class _EntertainmentPageState extends State<EntertainmentPage> {
     setState(() => _items = list);
   }
 
-  List<Entertainment> get _filtered =>
-      _filterType == 'all' ? _items : _items.where((e) => e.mediaType == _filterType).toList();
+  List<Entertainment> get _filtered {
+    final base = _filterType == 'all'
+        ? List.of(_items)
+        : _items.where((e) => e.mediaType == _filterType).toList();
+    switch (_sortOrder) {
+      case 'oldest':      base.sort((a, b) => (a.id ?? 0).compareTo(b.id ?? 0));
+      case 'rating_high': base.sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+      case 'rating_low':  base.sort((a, b) => (a.rating ?? 0).compareTo(b.rating ?? 0));
+      case 'title':       base.sort((a, b) => a.title.compareTo(b.title));
+      default:            base.sort((a, b) => (b.id ?? 0).compareTo(a.id ?? 0));
+    }
+    return base;
+  }
 
   // ── 新增 / 编辑 ─────────────────────────────────────────
   Future<void> _showDialog({Entertainment? existing}) async {
@@ -366,7 +379,7 @@ class _EntertainmentPageState extends State<EntertainmentPage> {
     _selectedIds.clear();
     await _load();
     if (mounted) {
-      setState(() => _multiSelect = false);
+      setState(() { _multiSelect = false; globalCancelMultiSelect = null; });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 条记录'), duration: const Duration(seconds: 2)),
       );
@@ -659,15 +672,54 @@ class _EntertainmentPageState extends State<EntertainmentPage> {
             children: [
               const Text('体验珍藏',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              IconButton(
-                icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
-                tooltip: _multiSelect ? '退出多选' : '多选',
-                onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 排序按钮
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.sort, size: 20),
+                    tooltip: '排序',
+                    onSelected: (v) => setState(() => _sortOrder = v),
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(value: 'newest', child: Row(children: [
+                        if (_sortOrder == 'newest') const Icon(Icons.check, size: 14),
+                        const SizedBox(width: 4), const Text('最新添加'),
+                      ])),
+                      PopupMenuItem(value: 'oldest', child: Row(children: [
+                        if (_sortOrder == 'oldest') const Icon(Icons.check, size: 14),
+                        const SizedBox(width: 4), const Text('最早添加'),
+                      ])),
+                      PopupMenuItem(value: 'rating_high', child: Row(children: [
+                        if (_sortOrder == 'rating_high') const Icon(Icons.check, size: 14),
+                        const SizedBox(width: 4), const Text('评分最高'),
+                      ])),
+                      PopupMenuItem(value: 'rating_low', child: Row(children: [
+                        if (_sortOrder == 'rating_low') const Icon(Icons.check, size: 14),
+                        const SizedBox(width: 4), const Text('评分最低'),
+                      ])),
+                      PopupMenuItem(value: 'title', child: Row(children: [
+                        if (_sortOrder == 'title') const Icon(Icons.check, size: 14),
+                        const SizedBox(width: 4), const Text('标题排序'),
+                      ])),
+                    ],
+                  ),
+                  // 多选按钮
+                  IconButton(
+                    icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
+                    tooltip: _multiSelect ? '退出多选' : '多选',
+                    onPressed: () => setState(() {
+                      _multiSelect = !_multiSelect;
+                      _selectedIds.clear();
+                      globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                    }),
+                  ),
+                  // 记录按钮
+                  ElevatedButton.icon(
+                      onPressed: () => _showDialog(),
+                      icon: const Icon(Icons.add),
+                      label: const Text('记录')),
+                ],
               ),
-              ElevatedButton.icon(
-                  onPressed: () => _showDialog(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('记录')),
             ],
           ),
           const SizedBox(height: 6),
@@ -743,7 +795,10 @@ class _EntertainmentPageState extends State<EntertainmentPage> {
                       Widget cardWidget = GestureDetector(
                         onLongPress: () {
                           if (!_multiSelect && e.id != null) {
-                            setState(() { _multiSelect = true; _selectedIds.add(e.id!); });
+                            setState(() {
+                            _multiSelect = true; _selectedIds.add(e.id!);
+                            globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
+                          });
                           }
                         },
                         onTap: _multiSelect ? () {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:life_companion_app/data/milestone_dao.dart';
 import 'package:life_companion_app/models/milestone.dart';
+import 'package:life_companion_app/main.dart';
 
 class MilestonePage extends StatefulWidget {
   const MilestonePage({super.key});
@@ -47,6 +48,7 @@ class _MilestonePageState extends State<MilestonePage> {
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 个里程碑'), duration: const Duration(seconds: 2)),
       );
@@ -159,7 +161,10 @@ class _MilestonePageState extends State<MilestonePage> {
               IconButton(
                 icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                 tooltip: _multiSelect ? '退出多选' : '多选',
-                onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                onPressed: () => setState(() {
+                  _multiSelect = !_multiSelect; _selectedIds.clear();
+                  globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                }),
               ),
             ]),
           ),
@@ -211,6 +216,7 @@ class _MilestonePageState extends State<MilestonePage> {
                   onLongPress: () {
                     if (!_multiSelect && m.id != null) {
                       setState(() { _multiSelect = true; _selectedIds.add(m.id!); });
+                      globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
                     }
                   },
                   onTap: _multiSelect ? () {

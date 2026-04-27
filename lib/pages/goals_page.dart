@@ -9,6 +9,8 @@ import 'package:life_companion_app/pages/focus_timer_page.dart';
 import 'package:life_companion_app/pages/focus_stats_page.dart';
 import 'package:life_companion_app/pages/achievement_wall_page.dart';
 import 'package:life_companion_app/services/notification_service.dart';
+import 'package:life_companion_app/services/session_manager.dart';
+import 'package:life_companion_app/main.dart';
 
 class GoalsPage extends StatefulWidget {
   const GoalsPage({super.key});
@@ -76,6 +78,7 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 个目标'), duration: const Duration(seconds: 2)),
       );
@@ -223,17 +226,17 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: Colors.amber.shade200),
                         ),
-                        child: const Column(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('💡 让目标更清晰', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            SizedBox(height: 4),
-                            Text('试试这样描述：', style: TextStyle(fontSize: 12)),
-                            Text('• 你希望多久内达成？', style: TextStyle(fontSize: 12)),
-                            Text('• 具体想达到什么程度？', style: TextStyle(fontSize: 12)),
-                            Text('• 每周愿意花多少时间？', style: TextStyle(fontSize: 12)),
-                            SizedBox(height: 4),
-                            Text('清晰的目标完成率是模糊目标的5倍哦 ✨', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                            const Text('💡 让目标更清晰', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(height: 4),
+                            const Text('试试这样描述：', style: TextStyle(fontSize: 12)),
+                            const Text('• 你希望多久内达成？', style: TextStyle(fontSize: 12)),
+                            const Text('• 具体想达到什么程度？', style: TextStyle(fontSize: 12)),
+                            const Text('• 每周愿意花多少时间？', style: TextStyle(fontSize: 12)),
+                            const SizedBox(height: 4),
+                            Text('清晰的目标完成率是模糊目标甄5倍哦 ✨', style: TextStyle(fontSize: 11, color: Theme.of(ctx).hintColor)),
                           ],
                         ),
                       ),
@@ -249,7 +252,7 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
 
                     // ── 目标意义锚定（P0必填） ──
                     const Text('🎯 这个目标对你意味着什么？', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const Text('（当你想放弃时，这段话会提醒你为什么开始）', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                    Text('（当你想放弃时，这段话会提醒你为什么开始）', style: TextStyle(fontSize: 11, color: Theme.of(ctx).hintColor)),
                     const SizedBox(height: 4),
                     TextField(
                       controller: meaningCtl,
@@ -292,7 +295,7 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
                     // ── 打卡频率 ──
                     if (level == 'daily' || level == 'weekly') ...[
                       const Text('打卡频率（每周几天）', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const Text('自主选择适合你的节奏，无需每天', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      Text('自主选择适合你的节奏，无需每天', style: TextStyle(fontSize: 11, color: Theme.of(ctx).hintColor)),
                       Row(children: [
                         Expanded(
                           child: Slider(
@@ -308,7 +311,7 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
 
                     // ── 微行动（5分钟内完成） ──
                     const Text('✅ 微行动（5分钟就能完成的小事）', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    const Text('行动越小阻力越小，先开始再说！', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                    Text('行动越小阻力越小，先开始再说！', style: TextStyle(fontSize: 11, color: Theme.of(ctx).hintColor)),
                     const SizedBox(height: 4),
                     ...List.generate(3, (i) => Padding(
                       padding: const EdgeInsets.only(bottom: 6),
@@ -504,7 +507,7 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
             if (g.startDate != null)
               Text('坚持了 ${((DateTime.now().millisecondsSinceEpoch - g.startDate!) / 86400000).ceil()} 天'),
             const SizedBox(height: 12),
-            const Text('你想给自己一个奖励吗？', style: TextStyle(color: Colors.black54)),
+            Text('你想给自己一个奖励吗？', style: TextStyle(color: Theme.of(c).hintColor)),
           ],
         ),
         actions: [
@@ -548,7 +551,10 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
               IconButton(
                 icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 22),
                 tooltip: _multiSelect ? '退出多选' : '多选',
-                onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                onPressed: () => setState(() {
+                  _multiSelect = !_multiSelect; _selectedIds.clear();
+                  globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                }),
               ),
               IconButton(
                 onPressed: _showAddDialog,
@@ -566,6 +572,72 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
           unselectedLabelColor: Colors.grey,
           indicatorSize: TabBarIndicatorSize.label,
           tabs: List.generate(5, (i) => Tab(text: _levelLabels[i])),
+        ),
+        // ── 专注会话横幅 ──
+        ListenableBuilder(
+          listenable: FocusSessionManager.instance,
+          builder: (context, _) {
+            final mgr = FocusSessionManager.instance;
+            if (!mgr.isActive) return const SizedBox.shrink();
+            final h = mgr.elapsed.inHours;
+            final m = mgr.elapsed.inMinutes % 60;
+            final s = mgr.elapsed.inSeconds % 60;
+            final timeStr = h > 0
+                ? '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}'
+                : '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+            return InkWell(
+              onTap: () async {
+                // 找到对应 goal 导航回专注页
+                if (mgr.goalId != null) {
+                  final goal = await GoalDao.getById(mgr.goalId!);
+                  if (goal != null && mounted) {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FocusTimerPage(goal: goal),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Container(
+                color: mgr.isPaused ? Colors.orange.shade100 : Colors.amber.shade50,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.timer,
+                        color: mgr.isPaused ? Colors.orange.shade700 : Colors.amber.shade700,
+                        size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '「${mgr.goalTitle}」专注${mgr.isPaused ? '已暂停' : '进行中'}  $timeStr',
+                        style: TextStyle(
+                          color: mgr.isPaused
+                              ? Colors.orange.shade800
+                              : Colors.amber.shade800,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Text('返回专注',
+                        style: TextStyle(
+                            color: mgr.isPaused
+                                ? Colors.orange.shade700
+                                : Colors.amber.shade700,
+                            fontSize: 12)),
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right,
+                        color: mgr.isPaused
+                            ? Colors.orange.shade700
+                            : Colors.amber.shade700,
+                        size: 18),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
         // ── 多选操作栏 ──
         if (_multiSelect)
@@ -629,6 +701,7 @@ class _GoalsPageState extends State<GoalsPage> with SingleTickerProviderStateMix
                         onLongPress: () {
                           if (!_multiSelect && g.id != null) {
                             setState(() { _multiSelect = true; _selectedIds.add(g.id!); });
+                            globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
                           }
                         },
                         onTap: _multiSelect ? () {

@@ -257,8 +257,7 @@ class _StatCol extends StatelessWidget {
                 color: Colors.amber)),
         const SizedBox(height: 2),
         Text(label,
-            style:
-                const TextStyle(fontSize: 11, color: Colors.black54)),
+            style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
       ],
     );
   }

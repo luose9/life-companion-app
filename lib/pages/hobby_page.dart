@@ -8,6 +8,7 @@ import 'package:life_companion_app/data/hobby_dao.dart';
 import 'package:life_companion_app/data/hobby_work_dao.dart';
 import 'package:life_companion_app/models/hobby.dart';
 import 'package:life_companion_app/models/hobby_work.dart';
+import 'package:life_companion_app/main.dart';
 
 class HobbyPage extends StatefulWidget {
   const HobbyPage({super.key});
@@ -73,6 +74,7 @@ class _HobbyPageState extends State<HobbyPage> with SingleTickerProviderStateMix
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 个爱好'), duration: const Duration(seconds: 2)),
       );
@@ -303,6 +305,16 @@ class _HobbyPageState extends State<HobbyPage> with SingleTickerProviderStateMix
               onPressed: () async {
                 final name = nameCtl.text.trim();
                 if (name.isEmpty) return;
+                // 检查重名
+                final existing = await HobbyDao.getByName(name);
+                if (existing != null) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('已存在同名爱好「${existing.name}」')),
+                    );
+                  }
+                  return;
+                }
                 await HobbyDao.insert(Hobby(
                   name: name,
                   category: cat,
@@ -610,7 +622,10 @@ class _HobbyPageState extends State<HobbyPage> with SingleTickerProviderStateMix
               IconButton(
                 icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                 tooltip: _multiSelect ? '退出多选' : '多选',
-                onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                onPressed: () => setState(() {
+                  _multiSelect = !_multiSelect; _selectedIds.clear();
+                  globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                }),
               ),
             ],
           ),
@@ -669,6 +684,7 @@ class _HobbyPageState extends State<HobbyPage> with SingleTickerProviderStateMix
                         onLongPress: () {
                           if (!_multiSelect && h.id != null) {
                             setState(() { _multiSelect = true; _selectedIds.add(h.id!); });
+                            globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
                           }
                         },
                         onTap: _multiSelect ? () {
@@ -895,9 +911,82 @@ class _HobbyWorksPageState extends State<_HobbyWorksPage> {
     }
   }
 
+  Future<void> _editWork(HobbyWork w) async {
+    final titleCtl = TextEditingController(text: w.title ?? '');
+    final noteCtl  = TextEditingController(text: w.note ?? '');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑作品'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (w.imagePath != null) ...[
+                _HobbyPageState._buildMediaPreview(
+                    w.imagePath!, w.mediaType ?? HobbyWork.detectMediaType(w.imagePath!), height: 120),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () { Navigator.pop(ctx); _openFile(w.imagePath!); },
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('查看文件'),
+                ),
+                const SizedBox(height: 8),
+              ],
+              TextField(
+                controller: titleCtl,
+                decoration: const InputDecoration(labelText: '作品标题', border: OutlineInputBorder(), isDense: true),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: noteCtl,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: '感受/笔记', border: OutlineInputBorder(), isDense: true),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () async {
+              if (titleCtl.text.trim().isEmpty) return;
+              final updated = HobbyWork(
+                id: w.id,
+                hobbyId: w.hobbyId,
+                title: titleCtl.text.trim(),
+                imagePath: w.imagePath,
+                mediaType: w.mediaType,
+                note: noteCtl.text.trim().isNotEmpty ? noteCtl.text.trim() : null,
+                createdAt: w.createdAt,
+              );
+              await HobbyWorkDao.update(updated);
+              Navigator.pop(ctx);
+              await _load();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('作品已更新 ✨'), duration: Duration(seconds: 2)),
+                );
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_multiSelect,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _multiSelect) {
+          setState(() { _multiSelect = false; _selectedIds.clear(); });
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text('${widget.hobby.name} · 作品集'),
         actions: [
@@ -976,7 +1065,7 @@ class _HobbyWorksPageState extends State<_HobbyWorksPage> {
                                   else _selectedIds.add(w.id!);
                                 });
                               }
-                            : () { if (w.imagePath != null) _openFile(w.imagePath!); },
+                            : () => _editWork(w),
                         child: Stack(
                           children: [
                             Card(
@@ -1032,6 +1121,7 @@ class _HobbyWorksPageState extends State<_HobbyWorksPage> {
           ),
         ],
       ),
+    ),
     );
   }
 

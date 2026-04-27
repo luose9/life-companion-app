@@ -55,6 +55,13 @@ class GoalDao {
     return await DBProvider.db.update('goals', goal.toMap(), goal.id!);
   }
 
+  static Future<Goal?> getById(int id) async {
+    final db = await DBProvider.db.database;
+    final rows = await db.query('goals', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return null;
+    return Goal.fromMap(rows.first);
+  }
+
   static Future<int> deleteGoal(int id) async {
     return await DBProvider.db.delete('goals', id);
   }

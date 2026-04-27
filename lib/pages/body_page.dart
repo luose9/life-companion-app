@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:life_companion_app/data/body_record_dao.dart';
 import 'package:life_companion_app/models/body_record.dart';
+import 'package:life_companion_app/main.dart';
+import 'dart:math';
+import 'package:url_launcher/url_launcher.dart';
 
 class BodyPage extends StatefulWidget {
   const BodyPage({super.key});
@@ -20,6 +23,7 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl.addListener(() => setState(() {}));
     _load();
   }
 
@@ -65,6 +69,7 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 条记录'), duration: const Duration(seconds: 2)),
       );
@@ -114,7 +119,9 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: sleepTime != null && sleepTime!.hour == qt.hour && sleepTime!.minute == qt.minute ? Colors.blue.shade100 : Colors.grey.shade100,
+                          color: sleepTime != null && sleepTime!.hour == qt.hour && sleepTime!.minute == qt.minute
+                              ? (Theme.of(ctx).brightness == Brightness.dark ? Colors.blue.shade700 : Colors.blue.shade100)
+                              : (Theme.of(ctx).brightness == Brightness.dark ? Colors.grey.shade700 : Colors.grey.shade100),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: sleepTime != null && sleepTime!.hour == qt.hour && sleepTime!.minute == qt.minute ? Colors.blue : Colors.transparent),
                         ),
@@ -137,7 +144,9 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: wakeTime != null && wakeTime!.hour == qt.hour && wakeTime!.minute == qt.minute ? Colors.blue.shade100 : Colors.grey.shade100,
+                          color: wakeTime != null && wakeTime!.hour == qt.hour && wakeTime!.minute == qt.minute
+                              ? (Theme.of(ctx).brightness == Brightness.dark ? Colors.blue.shade700 : Colors.blue.shade100)
+                              : (Theme.of(ctx).brightness == Brightness.dark ? Colors.grey.shade700 : Colors.grey.shade100),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: wakeTime != null && wakeTime!.hour == qt.hour && wakeTime!.minute == qt.minute ? Colors.blue : Colors.transparent),
                         ),
@@ -147,7 +156,7 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
                 ]),
                 const SizedBox(height: 10),
                 const Text('睡眠质量', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                const Text('只是你的主观感受，不需要精确', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                Text('只是你的主观感受，不需要精确', style: TextStyle(fontSize: 11, color: Theme.of(ctx).hintColor)),
                 Row(children: [
                   const Text('😴', style: TextStyle(fontSize: 16)),
                   Expanded(child: Slider(value: quality, min: 1, max: 10, divisions: 9,
@@ -218,7 +227,9 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: sel ? Colors.blue.shade50 : Colors.grey.shade100,
+                        color: sel
+                            ? (Theme.of(ctx).brightness == Brightness.dark ? Colors.blue.shade700 : Colors.blue.shade50)
+                            : (Theme.of(ctx).brightness == Brightness.dark ? Colors.grey.shade700 : Colors.grey.shade100),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: sel ? Colors.blue.shade200 : Colors.transparent),
                       ),
@@ -289,6 +300,236 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
     );
   }
 
+  // ── 食谱查询 / 转盘 ──
+  static const _ingredientGroups = <String, List<String>>{
+    '🥦 蔬菜': [
+      '土豆', '番茄', '白菜', '菠菜', '豆腐', '茄子', '西兰花', '胡萝卜', '黄瓜', '冬瓜',
+      '莲藕', '芹菜', '韭菜', '蘑菇', '洋葱', '南瓜', '丝瓜', '苦瓜', '豆角', '四季豆',
+      '空心菜', '生菜', '油麦菜', '上海青', '紫甘蓝', '山药', '芋头', '竹笋', '香菜',
+      '荷兰豆', '豌豆', '玉米笋', '秋葵', '芦笋', '西葫芦', '彩椒', '青椒', '尖椒',
+      '番薯叶', '莴笋', '花椰菜', '金针菇', '平菇', '杏鲍菇', '香菇', '木耳',
+    ],
+    '🥩 肉类': [
+      '猪肉', '鸡肉', '牛肉', '羊肉', '排骨', '五花肉', '鸡蛋', '培根', '午餐肉',
+      '猪肝', '猪肚', '猪蹄', '鸡翅', '鸡腿', '鸭肉', '鸭血', '鸽子', '兔肉',
+      '牛腩', '牛尾', '羊排', '肥肠', '腊肉', '火腿', '香肠', '鹌鹑蛋',
+    ],
+    '🐟 海鲜': [
+      '鱼', '虾', '螃蟹', '贝类', '鱿鱼', '带鱼', '鲤鱼', '鲈鱼',
+      '草鱼', '鲫鱼', '三文鱼', '鳕鱼', '黄鱼', '生蚝', '蛤蜊', '扇贝',
+      '花蛤', '河蚌', '泥鳅', '龙利鱼', '墨鱼', '章鱼', '海参', '花甲',
+    ],
+    '🌾 主食': [
+      '大米', '面条', '馒头', '包子', '饺子', '粉丝', '玉米', '红薯',
+      '燕麦', '薏米', '糯米', '小米', '荞麦', '紫米', '粳米', '馄饨',
+      '年糕', '河粉', '米粉', '面疙瘩', '煎饼', '豆皮', '腐竹',
+    ],
+    '🧂 调料': [
+      '生姜', '大蒜', '葱', '辣椒', '花椒', '八角', '酱油', '醋', '豆瓣酱', '蚝油',
+      '香叶', '桂皮', '小茴香', '孜然', '咖喱', '老抽', '生抽', '料酒', '芝麻油',
+      '白糖', '冰糖', '盐', '胡椒粉', '十三香', '豆豉', '腐乳', '沙茶酱',
+    ],
+    '🌿 药食同源': [
+      '枸杞', '红枣', '黄芪', '党参', '当归', '百合', '莲子', '银耳', '黑芝麻',
+      '核桃', '花生', '薏仁', '山楂', '陈皮', '罗汉果', '桂圆', '人参', '茯苓',
+      '甘草', '淮山', '芡实', '葛根', '玉竹', '麦冬', '石斛', '菊花', '决明子',
+      '红花', '川芎', '丁香', '肉桂', '豆蔻', '沙参', '五味子', '天麻',
+      '首乌', '冬虫夏草', '灵芝', '黑木耳', '白果', '荷叶', '马齿苋', '蒲公英',
+    ],
+    '🫙 豆制品 / 其他': [
+      '豆腐', '豆干', '豆皮', '纳豆', '毛豆', '黄豆', '黑豆', '红豆', '绿豆',
+      '花豆', '鹰嘴豆', '魔芋', '海带', '紫菜', '裙带菜', '粉条', '粉皮',
+      '鸡豆花', '豆浆', '千张', '臭豆腐',
+    ],
+    '🍎 水果入菜': [
+      '苹果', '梨', '菠萝', '柠檬', '橙子', '番木瓜', '芒果', '火龙果',
+      '葡萄', '蓝莓', '草莓', '西瓜', '哈密瓜', '猕猴桃', '荔枝', '榴莲',
+    ],
+    '🥜 坚果 / 干货': [
+      '花生', '核桃', '腰果', '松子', '杏仁', '瓜子', '榛子', '开心果',
+      '莲子', '桂圆干', '枸杞', '红枣', '葡萄干', '无花果', '柿饼', '冬菇',
+    ],
+  };
+
+  Future<void> _showRecipeSpinDialog() async {
+    final rng = Random();
+    final allIngredients = _ingredientGroups.values.expand((l) => l).toList();
+    List<String> spunIngredients = [];
+    int spinCount = 0;
+    final Set<String> manualSelected = {};
+    String searchQuery = '';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final allSelected = {...spunIngredients, ...manualSelected}.toList();
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── 头部 ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
+                  child: Row(children: [
+                    const Icon(Icons.casino_outlined, size: 20),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('食谱灵感', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ]),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── 转盘区域 ──
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              Text('🎰 随机食材转盘（已转 $spinCount/3 次）',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 8),
+                              if (spunIngredients.isNotEmpty)
+                                Wrap(
+                                  spacing: 6, runSpacing: 4,
+                                  children: spunIngredients.map((s) => Chip(
+                                    label: Text(s, style: const TextStyle(fontSize: 12)),
+                                    onDeleted: () => setS(() => spunIngredients.remove(s)),
+                                    backgroundColor: Colors.orange.shade100,
+                                  )).toList(),
+                                )
+                              else
+                                Text('点下方按钮随机获得食材灵感', style: TextStyle(fontSize: 12, color: Theme.of(ctx).hintColor)),
+                              const SizedBox(height: 8),
+                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                ElevatedButton.icon(
+                                  onPressed: spinCount < 3 ? () {
+                                    final picked = allIngredients[rng.nextInt(allIngredients.length)];
+                                    setS(() {
+                                      spunIngredients.add(picked);
+                                      spinCount++;
+                                    });
+                                  } : null,
+                                  icon: const Icon(Icons.refresh, size: 18),
+                                  label: Text(spinCount >= 3 ? '已转3次' : '转一下 ${spinCount + 1}/3'),
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                                ),
+                                if (spinCount > 0) ...[
+                                  const SizedBox(width: 8),
+                                  TextButton(
+                                    onPressed: () => setS(() { spunIngredients.clear(); spinCount = 0; }),
+                                    child: const Text('重置'),
+                                  ),
+                                ],
+                              ]),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // ── 手动选择食材 ──
+                        const Text('或手动选择食材', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        ...(_ingredientGroups.entries.map((grp) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(grp.key, style: TextStyle(fontSize: 12, color: Theme.of(ctx).hintColor)),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6, runSpacing: 4,
+                              children: grp.value.map((ing) {
+                                final sel = manualSelected.contains(ing);
+                                return GestureDetector(
+                                  onTap: () => setS(() {
+                                    if (sel) manualSelected.remove(ing);
+                                    else manualSelected.add(ing);
+                                  }),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: sel
+                                          ? (Theme.of(ctx).brightness == Brightness.dark ? Colors.green.shade700 : Colors.green.shade100)
+                                          : Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: sel ? Colors.green : Colors.transparent),
+                                    ),
+                                    child: Text(ing, style: TextStyle(
+                                      fontSize: 12,
+                                      color: sel ? (Theme.of(ctx).brightness == Brightness.dark ? Colors.white : Colors.green.shade800) : null,
+                                    )),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ))).toList(),
+
+                        // ── 已选汇总 ──
+                        if (allSelected.isNotEmpty) ...[
+                          const Divider(),
+                          Text('已选食材：${allSelected.join('、')}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 8),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(children: [
+                    if (manualSelected.isNotEmpty || spunIngredients.isNotEmpty)
+                      TextButton(
+                        onPressed: () => setS(() { manualSelected.clear(); spunIngredients.clear(); spinCount = 0; }),
+                        child: const Text('清空'),
+                      ),
+                    const Spacer(),
+                    if (allSelected.isNotEmpty) ...[
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final query = Uri.encodeComponent(allSelected.join(' '));
+                          final url = Uri.parse('https://www.xiachufang.com/search/?keyword=$query');
+                          try {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          } catch (_) {
+                            await launchUrl(url, mode: LaunchMode.platformDefault);
+                          }
+                        },
+                        icon: const Icon(Icons.search, size: 18),
+                        label: const Text('搜食谱'),
+                      ),
+                    ] else
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final url = Uri.parse('https://www.xiachufang.com/explore/');
+                          try {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          } catch (_) {
+                            await launchUrl(url, mode: LaunchMode.platformDefault);
+                          }
+                        },
+                        icon: const Icon(Icons.explore, size: 18),
+                        label: const Text('随便看看'),
+                      ),
+                  ]),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -299,10 +540,19 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
             child: Row(children: [
               const Text('身体记录', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const Spacer(),
+              if (_tabCtrl.index == 1)
+                IconButton(
+                  icon: const Icon(Icons.casino_outlined, size: 20),
+                  tooltip: '食谱转盘',
+                  onPressed: _showRecipeSpinDialog,
+                ),
               IconButton(
                 icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                 tooltip: _multiSelect ? '退出多选' : '多选',
-                onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                onPressed: () => setState(() {
+                  _multiSelect = !_multiSelect; _selectedIds.clear();
+                  globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                }),
               ),
             ]),
           ),
@@ -369,7 +619,7 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
         return Card(
           color: _multiSelect && isSelected ? Colors.blue.shade50 : null,
           child: InkWell(
-            onLongPress: () { if (!_multiSelect && r.id != null) setState(() { _multiSelect = true; _selectedIds.add(r.id!); }); },
+            onLongPress: () { if (!_multiSelect && r.id != null) { setState(() { _multiSelect = true; _selectedIds.add(r.id!); }); globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }); } },
             onTap: _multiSelect ? () { if (r.id == null) return; setState(() { if (_selectedIds.contains(r.id)) _selectedIds.remove(r.id); else _selectedIds.add(r.id!); }); } : null,
             child: ListTile(
               leading: _multiSelect ? Checkbox(value: isSelected, onChanged: (v) { if (r.id == null) return; setState(() { if (v == true) _selectedIds.add(r.id!); else _selectedIds.remove(r.id); }); }, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact)
@@ -404,7 +654,7 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
         return Card(
           color: _multiSelect && isSelected ? Colors.blue.shade50 : null,
           child: InkWell(
-            onLongPress: () { if (!_multiSelect && r.id != null) setState(() { _multiSelect = true; _selectedIds.add(r.id!); }); },
+            onLongPress: () { if (!_multiSelect && r.id != null) { setState(() { _multiSelect = true; _selectedIds.add(r.id!); }); globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }); } },
             onTap: _multiSelect ? () { if (r.id == null) return; setState(() { if (_selectedIds.contains(r.id)) _selectedIds.remove(r.id); else _selectedIds.add(r.id!); }); } : null,
             child: ListTile(
               leading: _multiSelect ? Checkbox(value: isSelected, onChanged: (v) { if (r.id == null) return; setState(() { if (v == true) _selectedIds.add(r.id!); else _selectedIds.remove(r.id); }); }, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact)
@@ -436,7 +686,7 @@ class _BodyPageState extends State<BodyPage> with SingleTickerProviderStateMixin
         return Card(
           color: _multiSelect && isSelected ? Colors.blue.shade50 : null,
           child: InkWell(
-            onLongPress: () { if (!_multiSelect && r.id != null) setState(() { _multiSelect = true; _selectedIds.add(r.id!); }); },
+            onLongPress: () { if (!_multiSelect && r.id != null) { setState(() { _multiSelect = true; _selectedIds.add(r.id!); }); globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }); } },
             onTap: _multiSelect ? () { if (r.id == null) return; setState(() { if (_selectedIds.contains(r.id)) _selectedIds.remove(r.id); else _selectedIds.add(r.id!); }); } : null,
             child: ListTile(
               leading: _multiSelect ? Checkbox(value: isSelected, onChanged: (v) { if (r.id == null) return; setState(() { if (v == true) _selectedIds.add(r.id!); else _selectedIds.remove(r.id); }); }, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact)

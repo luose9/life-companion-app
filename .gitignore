@@ -17,3 +17,8 @@ android/app/release
 local.properties
 android/.kotlin/
 .metadata
+
+# 微信相关（已从 UI 移除，保留在本地备用）
+lib/services/wechat_pay_channel.dart
+android/app/src/main/kotlin/com/example/life_companion_app/WechatPayListenerService.kt
+lib/services/session_manager.dart

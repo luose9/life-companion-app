@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:life_companion_app/data/gratitude_dao.dart';
 import 'package:life_companion_app/models/gratitude.dart';
+import 'package:life_companion_app/main.dart';
 
 class GratitudePage extends StatefulWidget {
   const GratitudePage({super.key});
@@ -53,6 +54,7 @@ class _GratitudePageState extends State<GratitudePage> with SingleTickerProvider
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 条记录'), duration: const Duration(seconds: 2)),
       );
@@ -149,7 +151,10 @@ class _GratitudePageState extends State<GratitudePage> with SingleTickerProvider
                   IconButton(
                     icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                     tooltip: _multiSelect ? '退出多选' : '多选',
-                    onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                    onPressed: () => setState(() {
+                      _multiSelect = !_multiSelect; _selectedIds.clear();
+                      globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                    }),
                   ),
                   if (_all.isNotEmpty)
                     TextButton.icon(
@@ -234,6 +239,7 @@ class _GratitudePageState extends State<GratitudePage> with SingleTickerProvider
             onLongPress: () {
               if (!_multiSelect && g.id != null) {
                 setState(() { _multiSelect = true; _selectedIds.add(g.id!); });
+                globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
               }
             },
             onTap: _multiSelect ? () {

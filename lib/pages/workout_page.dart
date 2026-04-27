@@ -4,6 +4,8 @@ import 'package:life_companion_app/models/workout.dart';
 import 'package:life_companion_app/widgets/charts.dart';
 import 'package:life_companion_app/pages/live_tracking_page.dart';
 import 'package:life_companion_app/pages/workout_result_page.dart';
+import 'package:life_companion_app/services/session_manager.dart';
+import 'package:life_companion_app/main.dart';
 
 const List<String> _kWorkoutTypes = ['跑步', '步行', '骑行', '游泳', '健身', '其他'];
 const List<IconData> _kWorkoutIcons = [
@@ -64,6 +66,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
     await _load();
     if (mounted) {
       setState(() => _multiSelect = false);
+      globalCancelMultiSelect = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已删除 $count 条运动记录'), duration: const Duration(seconds: 2)),
       );
@@ -116,6 +119,17 @@ class _WorkoutPageState extends State<WorkoutPage> {
   static const _kLiveIcons = [Icons.directions_run, Icons.directions_walk];
 
   Future<void> _startLiveTracking() async {
+    // 若已有活跃会话，直接返回继续
+    final mgr = WorkoutSessionManager.instance;
+    if (mgr.isActive && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => LiveTrackingPage(workoutType: mgr.workoutType)),
+      );
+      await _load();
+      return;
+    }
+
     String selectedType = '跑步';
     final ok = await showDialog<bool>(
       context: context,
@@ -328,6 +342,57 @@ class _WorkoutPageState extends State<WorkoutPage> {
       padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
+          // ── 活跃会话横幅 ──
+          ListenableBuilder(
+            listenable: WorkoutSessionManager.instance,
+            builder: (context, _) {
+              final mgr = WorkoutSessionManager.instance;
+              if (!mgr.isActive) return const SizedBox.shrink();
+              final h = mgr.elapsed.inHours;
+              final m = mgr.elapsed.inMinutes % 60;
+              final s = mgr.elapsed.inSeconds % 60;
+              final timeStr = h > 0
+                  ? '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}'
+                  : '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+              return Card(
+                color: mgr.isPaused ? Colors.orange.shade700 : Colors.green.shade700,
+                margin: const EdgeInsets.only(bottom: 6),
+                child: InkWell(
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LiveTrackingPage(workoutType: mgr.workoutType),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.gps_fixed, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${mgr.workoutType}${mgr.isPaused ? ' 已暂停' : ' 进行中'}  $timeStr',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14),
+                          ),
+                        ),
+                        const Text('点击返回',
+                            style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right, color: Colors.white70, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+
           // ── 汇总卡片（温暖版） ──
           Card(
             color: Colors.green.shade50,
@@ -374,7 +439,10 @@ class _WorkoutPageState extends State<WorkoutPage> {
                 IconButton(
                   icon: Icon(_multiSelect ? Icons.close : Icons.checklist, size: 20),
                   tooltip: _multiSelect ? '退出多选' : '多选',
-                  onPressed: () => setState(() { _multiSelect = !_multiSelect; _selectedIds.clear(); }),
+                  onPressed: () => setState(() {
+                    _multiSelect = !_multiSelect; _selectedIds.clear();
+                    globalCancelMultiSelect = _multiSelect ? () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; }) : null;
+                  }),
                 ),
                 ElevatedButton.icon(
                   onPressed: () => _startLiveTracking(),
@@ -442,6 +510,7 @@ class _WorkoutPageState extends State<WorkoutPage> {
                           onLongPress: () {
                             if (!_multiSelect && w.id != null) {
                               setState(() { _multiSelect = true; _selectedIds.add(w.id!); });
+                              globalCancelMultiSelect = () => setState(() { _multiSelect = false; _selectedIds.clear(); globalCancelMultiSelect = null; });
                             }
                           },
                           onTap: _multiSelect ? () {

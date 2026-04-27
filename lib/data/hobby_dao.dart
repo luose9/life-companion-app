@@ -23,4 +23,13 @@ class HobbyDao {
     if (maps.isEmpty) return null;
     return Hobby.fromMap(maps.first);
   }
+
+  /// 按名称查找（忽略大小写），用于去重判断
+  static Future<Hobby?> getByName(String name) async {
+    final db = await DBProvider.db.database;
+    final maps = await db.query('hobbies',
+        where: 'LOWER(name) = LOWER(?)', whereArgs: [name.trim()]);
+    if (maps.isEmpty) return null;
+    return Hobby.fromMap(maps.first);
+  }
 }
