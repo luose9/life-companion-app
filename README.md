@@ -74,9 +74,10 @@ lib/
 ```
 
 ## 📸 截图
+<img width="300" src="https://github.com/user-attachments/assets/79caa996-ac94-4d9c-ba2a-e09d87a36b9d" />
+<img width="300" src="https://github.com/user-attachments/assets/330b00c8-f906-4489-891e-93cf921d67e4" />
 
-<img width="1080" height="2400" alt="cd39effd2e4267ce5e7c658bceeab30" src="https://github.com/user-attachments/assets/bb3b3f84-c302-42c1-91b0-b61e076804da" />
-<img width="1080" height="2400" alt="ed18d50cf71c8b971003ca3f7028790" src="https://github.com/user-attachments/assets/e374b01d-a8dc-4f9c-850f-3ed4f9104782" />
+
 
 
 ## 📄 License
